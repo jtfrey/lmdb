@@ -124,13 +124,18 @@ ADD_SUBDIRECTORY(lmdb_nagios_check)
 ADD_SUBDIRECTORY(lmdb_report)
 ADD_SUBDIRECTORY(lmdb_ls)
 ADD_SUBDIRECTORY(etc)
+
+#
+# Be sure we get our local state directory created:
+#
+INSTALL(DIRECTORY DESTINATION "${LMDB_INSTALL_LOCALSTATEDIR}")
+
 IF(NOT LMDB_DISABLE_RRDTOOL)
 	ADD_SUBDIRECTORY(graph)
 
 	#
-	# Be sure we get our local state directory created:
+	# Add the rrds and graphs directories to local state:
 	#
-	INSTALL(DIRECTORY DESTINATION "${LMDB_INSTALL_LOCALSTATEDIR}")
 	INSTALL(DIRECTORY DESTINATION "${LMDB_INSTALL_LOCALSTATEDIR}/rrds")
 	INSTALL(DIRECTORY DESTINATION "${LMDB_INSTALL_LOCALSTATEDIR}/graphs")
 ENDIF(NOT LMDB_DISABLE_RRDTOOL)
