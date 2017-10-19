@@ -1,0 +1,29 @@
+#
+# This is the configuration file for the 'graph' script
+#
+
+#
+# Valid graph types are:
+#
+#   hour        last 60 minutes
+#   12hour      last 12 hours
+#   day         last 24 hours
+#   week        last 7 days
+#   month       last 30 days
+#
+GRAPH_TYPES="hour day week"
+
+#
+# Override which rrdtool executable is used:
+#
+#RRDTOOL=/usr/bin/rrdtool
+
+#
+# Override the RRD repository directory:
+#
+#RRD_REPODIR=/var/lib/lmdb/rrds
+
+#
+# Override the graphic repository directory:
+#
+#GRAPH_REPODIR=/var/lib/lmdb/graphs

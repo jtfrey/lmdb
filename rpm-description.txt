@@ -1,0 +1,8 @@
+The lmdb library and tools is used to perform periodic checks of license usage on FLEXlm license servers and store the data in:
+
+  - a SQLite3 database file
+
+  - an round-robin database (RRD) file
+
+The former format allows for rich queries against the data using SQL, while the latter allows graphs to easily be generated from the data.
+

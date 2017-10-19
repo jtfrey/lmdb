@@ -1,0 +1,96 @@
+#
+# This is a sample lmdb configuration file.
+#
+# Lines that start with whitespace and a hash character (#) are
+# comment lines.
+#
+# Lines of the form
+#
+#   key = value
+#
+# are configuration directives.  Line continuation using a backslash
+# are permissible:
+#
+#   key = value of \
+#         this line continues \
+#         until here
+#
+# Paths that start with %LMDB% are taken relative to the installation
+# prefix for the program.
+#
+# Paths that start with %LMDB_CONFDIR% are taken relative to the configuration
+# directory for the program.
+#
+# Paths that start with %LMDB_STATEDIR% are taken relative to the local state
+# directory for the program.
+#
+
+
+#
+# Additional files can be chained into the configuration -- just be carefull
+# to NOT create inclusion loops, the parser doesn't watch for such things and
+# you'll end up in an infinite loop, my friend!
+#
+#include = %LMDB_CONFDIR%/local.conf
+
+
+#
+# Path to the database file that will contain feature:vendor:version definitions
+# and counts of the features:
+#
+#database-path = %LMDB_STATEDIR%/licenses.sqlite3db
+
+
+#
+# Path to the FLEXlm license configuration file that will be parsed for
+# feature:vendor:version definitions:
+#
+#license-file = /etc/license.dat
+
+
+#
+# To update feature counts, the program needs the output of an lmstat command.
+# There are three ways to provide this output:
+#
+# (1) A plain text file containing the output:
+#
+#lmstat-static-output = /tmp/lmstat-output.txt
+
+# (2) A command string that will be executed by a shell:
+#
+#lmstat-cmd = lmstat -c /etc/license.dat -a
+
+# (3) A list of strings -- path to execute and argument list -- that will be
+#     executed directly.  Whitespace separates the items in the list; single-
+#     or double-quotes can be used to include whitespace in an item.
+#
+#lmstat-cmd-and-args = /usr/local/flexlm/bin/lmutil \
+#                        lmstat \
+#                          -c /etc/license.dat \
+#                          -a
+
+
+#
+# Directory in which RRD files should be stashed:
+#
+#rrd-repodir  = %LMDB_STATEDIR%/rrds
+
+#
+# Enable/disable update of RRD files by lmdb_cli
+# (valid values are true/yes/t/y and false/no/f/n)
+#
+#no-rrd-updates     = true
+
+#
+# For nagios checks, the default warning and critical thresholds
+# can be configured as a fraction or a percentage:
+#
+#nagios-warn	= 95%
+#nagios-crit	= 0.99
+
+#
+# A nagios rules file can be used to fine-tune the warning and critical
+# thresholds:
+#
+#nagios-rules	= %LMDB%/etc/lmdb/nagios_rules.conf.example
+

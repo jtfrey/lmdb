@@ -1,0 +1,9 @@
+CMAKE_MINIMUM_REQUIRED (VERSION 2.6)
+PROJECT (lmdb_nagios_check C)
+
+ADD_EXECUTABLE(lmdb_nagios_check lmconfig.c nagios_rules.c lmdb_nagios_check.c)
+TARGET_COMPILE_DEFINITIONS(lmdb_nagios_check PUBLIC -DLMDB_APPLICATION_NAGIOS_CHECK)
+TARGET_LINK_LIBRARIES(lmdb_nagios_check -lm ${SQLITE3_LIBRARIES} ${RRDTOOL_LIBRARIES} lmdb)
+INCLUDE_DIRECTORIES(BEFORE ../lib)
+INSTALL (TARGETS lmdb_nagios_check DESTINATION ${LMDB_INSTALL_BINDIR} COMPONENT binaries)
+

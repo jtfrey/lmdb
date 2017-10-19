@@ -1,0 +1,13 @@
+#!/bin/bash
+#
+#
+
+RRDTOOL="@RRDTOOL_EXE@"
+RRD_REPODIR="@LMDB_RRD_REPODIR@"
+GRAPH_REPODIR="@LMDB_GRAPH_REPODIR@"
+
+if [ -r "@LMDB_GRAPH_CONF@" ]; then
+  . "@LMDB_GRAPH_CONF@"
+fi
+
+
