@@ -274,13 +274,21 @@ extern const time_t lmdb_check_timestamp_now;
 
 /*!
   @function lmdb_commit_counts
-  Attempt to commit all updated license is-use counts to the database
+  Attempt to commit all updated license in-use counts to the database
   with check_timestamp as the time logged in the database.
   
   Returns true if all counts were commited successully.
 */
 bool lmdb_commit_counts(lmdb_ref the_db, time_t check_timestamp);
 
+/*!
+  @function lmdb_get_last_check_timestamp
+  Attempt to retrieve the maximum timestamp from the in-use counts table
+  from the database.
+  
+  Returns true if a timestamp was retrieved, false in case of error.
+*/
+bool lmdb_get_last_check_timestamp(lmdb_ref the_db, time_t *check_timestamp);
 
 #if 0
 #pragma mark -

@@ -132,6 +132,7 @@ __lmconfig_alloc(void)
 #ifdef LMDB_APPLICATION_NAGIOS_CHECK
     new_config->public.nagios_default_warn = nagios_threshold_make(nagios_threshold_type_fraction, 0.95);
     new_config->public.nagios_default_crit = nagios_threshold_make(nagios_threshold_type_fraction, 0.99);
+    new_config->public.maximum_data_age = 60 * 60 * 2; /* 2 hours */
 #endif
 #ifdef LMDB_APPLICATION_REPORT
     new_config->public.report_aggregate = lmdb_usage_report_aggregate_total;
@@ -522,6 +523,52 @@ lmconfig_update_with_file(
           }
         }
 
+        else if ( __lmconfig_param_cmp(param_start, param_end - param_start, "max-data-age") ) {
+          switch ( str_next_word(&line, THE_CONFIG->pool, &word) ) {
+            case str_next_word_ok: {
+              char      *endp;
+              long      value = strtol(word, &endp, 10);
+              
+              if ( (endp > word) && (value > 0) ) {
+                while ( *endp && isspace(*endp) ) endp++;
+                switch ( *endp ) {
+                  case 'd':
+                  case 'D':
+                    value *= 24;
+                  case 'h':
+                  case 'H':
+                    value *= 60;
+                  case 'm':
+                  case 'M':
+                    value *= 60;
+                  case 's':
+                  case 'S':
+                  case '\0':
+                    THE_CONFIG->public.maximum_data_age = value;
+                    break;
+                  default:
+                    lmlogf(lmlog_level_warn, "invalid unit on data age: %s", word);
+                    ok = false;
+                    break;
+                }
+              } else {
+                lmlogf(lmlog_level_warn, "invalid data age: %s", word);
+                __lmconfig_dealloc(THE_CONFIG);
+                return NULL;
+              }
+              break;
+            }
+            case str_next_word_none:
+              lmlogf(lmlog_level_error, "no value provided for nagios-warn parameter at line %lu\n", fscanln_get_line_number(scanner));
+              ok = false;
+              break;
+            case str_next_word_error:
+              fprintf(stderr, "at line %lu\n", fscanln_get_line_number(scanner));
+              ok = false;
+              break;
+          }
+        }
+
         else if ( __lmconfig_param_cmp(param_start, param_end - param_start, "nagios-warn") ) {
           switch ( str_next_word(&line, THE_CONFIG->pool, &word) ) {
             case str_next_word_ok: {
@@ -609,6 +656,7 @@ struct option lmdb_cli_options[] = {
     { "nagios-rules",           required_argument,      NULL, 'r' },
     { "nagios-warn",            required_argument,      NULL, 'w' },
     { "nagios-crit",            required_argument,      NULL, 'c' },
+    { "max-data-age",           required_argument,      NULL, 'm' },
 #endif
 #ifdef LMDB_APPLICATION_REPORT
     { "report-aggregate",       required_argument,      NULL, 'a' },
@@ -641,7 +689,7 @@ const char *lmdb_cli_option_flags = "hvqtC:d:c:O:e:R:uU";
 #endif
 
 #ifdef LMDB_APPLICATION_NAGIOS_CHECK
-const char *lmdb_cli_option_flags = "hvqtC:d:r:w:c:";
+const char *lmdb_cli_option_flags = "hvqtC:d:r:w:c:m:";
 #endif
 
 #ifdef LMDB_APPLICATION_REPORT
@@ -691,6 +739,10 @@ lmconfig_usage(
       "                                         for license usage\n"
 #endif
 #ifdef LMDB_APPLICATION_NAGIOS_CHECK
+      "  --max-data-age/-m <time>               if the count data is older than this many seconds, it\n"
+      "                                         should be considered indicative of a problem\n\n"
+      "                                           <time> = <integer>{s|m|h|d}\n\n"
+      "                                         where the unit is optional and defaults to seconds\n"
       "  --nagios-rules/-r <path>               load a list of license tuple matching rules from the given\n"
       "                                         path\n"
       "  --nagios-warn/-w <pct|fraction>        warn when license usage exceeds the given pct (e.g. 95%%)\n"
@@ -833,7 +885,7 @@ lmconfig_update_with_options(
           if ( path ) THE_CONFIG->public.base_config_path = path;
         } else {
           lmlog(lmlog_level_error, "no file path provided to --conf/-C option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -847,12 +899,12 @@ lmconfig_update_with_options(
           THE_CONFIG->public.license_db_path = path;
           if ( ! THE_CONFIG->public.license_db_path ) {
             lmlog(lmlog_level_error, "unable to allocate space for license database path\n");
-            lmconfig_dealloc(the_config);
+            __lmconfig_dealloc(THE_CONFIG);
             return NULL;
           }
         } else {
           lmlog(lmlog_level_error, "no file path provided to --database-path/-d option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -867,12 +919,12 @@ lmconfig_update_with_options(
           THE_CONFIG->public.flexlm_license_path = path;
           if ( ! THE_CONFIG->public.flexlm_license_path ) {
             lmlog(lmlog_level_error, "unable to allocate space for FLEXlm license path\n");
-            lmconfig_dealloc(the_config);
+            __lmconfig_dealloc(THE_CONFIG);
             return NULL;
           }
         } else {
           lmlog(lmlog_level_error, "no file path provided to --license-file/-c option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -887,12 +939,12 @@ lmconfig_update_with_options(
           THE_CONFIG->public.lmstat_interface.static_output = path;
           if ( ! THE_CONFIG->public.lmstat_interface.static_output ) {
             lmlog(lmlog_level_error, "unable to allocate space for lmstat static output path\n");
-            lmconfig_dealloc(the_config);
+            __lmconfig_dealloc(THE_CONFIG);
             return NULL;
           }
         } else {
           lmlog(lmlog_level_error, "no file path provided to --lmstat-static-output/-O option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -904,12 +956,12 @@ lmconfig_update_with_options(
           THE_CONFIG->public.lmstat_interface.command = mempool_strdup(THE_CONFIG->pool, optarg);
           if ( ! THE_CONFIG->public.lmstat_interface.static_output ) {
             lmlog(lmlog_level_error, "unable to allocate space for lmstat command\n");
-            lmconfig_dealloc(the_config);
+            __lmconfig_dealloc(THE_CONFIG);
             return NULL;
           }
         } else {
           lmlog(lmlog_level_error, "no command provided to --lmstat-cmd/-e option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -932,12 +984,12 @@ lmconfig_update_with_options(
             THE_CONFIG->public.rrd_repodir = path;
           } else {
             lmlog(lmlog_level_error, "unable to allocate space for RRD repository directory\n");
-            lmconfig_dealloc(the_config);
+            __lmconfig_dealloc(THE_CONFIG);
             return NULL;
           }
         } else {
           lmlog(lmlog_level_error, "no file path provided to --lmstat-static-output/-O option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -945,6 +997,46 @@ lmconfig_update_with_options(
 # endif
 #endif
 #ifdef LMDB_APPLICATION_NAGIOS_CHECK
+
+      case 'm': {
+        if ( optarg && *optarg ) {
+          char      *endp;
+          long      value = strtol(optarg, &endp, 10);
+
+          if ( (endp > optarg) && (value > 0) ) {
+            while ( *endp && isspace(*endp) ) endp++;
+            switch ( *endp ) {
+              case 'd':
+              case 'D':
+                value *= 24;
+              case 'h':
+              case 'H':
+                value *= 60;
+              case 'm':
+              case 'M':
+                value *= 60;
+              case 's':
+              case 'S':
+              case '\0':
+                break;
+              default:
+                lmlogf(lmlog_level_warn, "invalid unit on data age: %s", optarg);
+                __lmconfig_dealloc(THE_CONFIG);
+                return NULL;
+            }
+            THE_CONFIG->public.maximum_data_age = value;
+          } else {
+            lmlogf(lmlog_level_warn, "invalid data age: %s", optarg);
+            __lmconfig_dealloc(THE_CONFIG);
+            return NULL;
+          }
+        } else {
+          lmlog(lmlog_level_error, "no value provided to --max-data-age/-m option\n");
+          __lmconfig_dealloc(THE_CONFIG);
+          return NULL;
+        }
+        break;
+      }
 
       case 'r': {
         if ( optarg && *optarg ) {
@@ -958,7 +1050,7 @@ lmconfig_update_with_options(
               THE_CONFIG->public.nagios_rules = rules;
             } else {
               lmlogf(lmlog_level_error, "errors while parsing nagios rules file: %s", path);
-              lmconfig_dealloc(the_config);
+              __lmconfig_dealloc(THE_CONFIG);
               return NULL;
             }
           }
@@ -979,7 +1071,7 @@ lmconfig_update_with_options(
           }
         } else {
           lmlog(lmlog_level_error, "no value provided to --warning/-w option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -998,7 +1090,7 @@ lmconfig_update_with_options(
           }
         } else {
           lmlog(lmlog_level_error, "no value provided to --critical/-c option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -1023,7 +1115,7 @@ lmconfig_update_with_options(
           }
         } else {
           lmlog(lmlog_level_error, "no value provided to --report-aggregate/-a option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -1045,7 +1137,7 @@ lmconfig_update_with_options(
           }
         } else {
           lmlog(lmlog_level_error, "no value provided to --report-range/-r option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -1067,7 +1159,7 @@ lmconfig_update_with_options(
           }
         } else {
           lmlog(lmlog_level_error, "no value provided to --report-format/-f option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -1093,7 +1185,7 @@ lmconfig_update_with_options(
           }
         } else {
           lmlog(lmlog_level_error, "no value provided to --start-at/-s option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -1119,7 +1211,7 @@ lmconfig_update_with_options(
           }
         } else {
           lmlog(lmlog_level_error, "no value provided to --end-at/-e option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -1130,7 +1222,7 @@ lmconfig_update_with_options(
           THE_CONFIG->public.match_feature = mempool_strdup(THE_CONFIG->pool, optarg);
         } else {
           lmlog(lmlog_level_error, "no value provided to --match-feature option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -1141,7 +1233,7 @@ lmconfig_update_with_options(
           THE_CONFIG->public.match_vendor = mempool_strdup(THE_CONFIG->pool, optarg);
         } else {
           lmlog(lmlog_level_error, "no value provided to --match-vendor option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -1152,7 +1244,7 @@ lmconfig_update_with_options(
           THE_CONFIG->public.match_version = mempool_strdup(THE_CONFIG->pool, optarg);
         } else {
           lmlog(lmlog_level_error, "no value provided to --match-version option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -1199,12 +1291,12 @@ lmconfig_update_with_options(
             THE_CONFIG->public.match_id = value;
           } else {
             lmlogf(lmlog_level_error, "invalid argument to --match-id:  %s\n", optarg);
-            lmconfig_dealloc(the_config);
+            __lmconfig_dealloc(THE_CONFIG);
             return NULL;
           }
         } else {
           lmlog(lmlog_level_error, "no value provided to --match-id option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -1215,7 +1307,7 @@ lmconfig_update_with_options(
           THE_CONFIG->public.match_feature = mempool_strdup(THE_CONFIG->pool, optarg);
         } else {
           lmlog(lmlog_level_error, "no value provided to --match-feature option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -1226,7 +1318,7 @@ lmconfig_update_with_options(
           THE_CONFIG->public.match_vendor = mempool_strdup(THE_CONFIG->pool, optarg);
         } else {
           lmlog(lmlog_level_error, "no value provided to --match-vendor option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;
@@ -1237,7 +1329,7 @@ lmconfig_update_with_options(
           THE_CONFIG->public.match_version = mempool_strdup(THE_CONFIG->pool, optarg);
         } else {
           lmlog(lmlog_level_error, "no value provided to --match-version option\n");
-          lmconfig_dealloc(the_config);
+          __lmconfig_dealloc(THE_CONFIG);
           return NULL;
         }
         break;

@@ -36,6 +36,7 @@ static const char			*nagios_messages = NULL;
 typedef struct {
 	nagios_rules_ref					rules;
 	nagios_threshold					default_warn, default_crit;
+  time_t                    max_check_timestamp;
 } nagios_usage_context;
 
 //
@@ -104,6 +105,9 @@ lmdb_usage_iterator(
 	int										rc = nagios_exit_code_ok;
 	bool									should_test = true;
 	nagios_threshold			warn = nagios_threshold_default, crit = nagios_threshold_default;
+  
+  if ( check_timestamp.start > usage_conf->max_check_timestamp ) usage_conf->max_check_timestamp = check_timestamp.start;
+  if ( check_timestamp.end > usage_conf->max_check_timestamp ) usage_conf->max_check_timestamp = check_timestamp.end;
 	
 	if ( usage_conf->rules ) {
 		const char					*feature_tuple = strcatm(feature_string, ":", vendor, ":", version, NULL);
@@ -185,11 +189,15 @@ main(
   lmconfig      *the_conf = lmconfig_update_with_options(NULL, argc, argv);
   int           rc = 0;
   
+  if ( ! the_conf ) exit(EINVAL);
+  
   //
   // Now update from whatever configuration file we're supposed to be
   // using:
   //
   if ( file_exists(the_conf->base_config_path) ) the_conf = lmconfig_update_with_file(the_conf, the_conf->base_config_path);
+  
+  if ( ! the_conf ) exit(EINVAL);
   
   //
   // Command line arguments also override whatever may have been in a
@@ -219,10 +227,36 @@ main(
       															.rules = the_conf->nagios_rules,
       															.default_warn = the_conf->nagios_default_warn,
       															.default_crit = the_conf->nagios_default_crit,
+                                    .max_check_timestamp = 0
       														};
-      	
+      	time_t                  age;
+        
       	lmdb_usage_report_iterate(the_report, lmdb_usage_iterator, (const void*)&usage_conf);
-      	
+        if ( usage_conf.max_check_timestamp == 0 ) {
+          nagios_messages_append(nagios_exit_code_critical, "no feature counts found in database");
+        }
+        else if ( (age = (time(NULL) - usage_conf.max_check_timestamp)) > the_conf->maximum_data_age ) {
+          const char            *age_unit = "second";
+          
+          if ( age > 60 ) {
+            age /= 60;
+            if ( age > 60 ) {
+              age /= 60;
+              if ( age > 24 ) {
+                age /= 24;
+                age_unit = "day";
+              } else {
+                age_unit = "hour";
+              }
+            } else {
+              age_unit = "minute";
+            }
+          }
+          nagios_messages_appendf(nagios_exit_code_critical, "usage counts data is %lld %s%s old", (long long int)age, age_unit, (age == 1) ? "" : "s");
+        } else {
+          lmlogf(lmlog_level_info, "usage counts are %lld second%s old", age, (age == 1) ? "" : "s");
+        }
+        
       	lmdb_usage_report_release(the_report);
       }
       

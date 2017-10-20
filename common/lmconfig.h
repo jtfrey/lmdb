@@ -187,6 +187,10 @@ typedef unsigned int field_selection;
 		nagios_default_crit
 			the default critical threshold (as a usage percentage) that should
 			be applied to features
+    
+    maximum_data_age
+      if the count data is older than this number of seconds, consider
+      it to be too old
   
   lmdb_report
   ===========
@@ -268,6 +272,7 @@ typedef struct _lmconfig {
   // options specific to lmdb_nagios_check:
   nagios_rules_ref				nagios_rules;
   nagios_threshold				nagios_default_warn, nagios_default_crit;
+  int                     maximum_data_age;
 #endif
 
 #ifdef LMDB_APPLICATION_REPORT

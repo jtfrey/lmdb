@@ -237,6 +237,9 @@ static const char   *__db_add_feature_count_query =
 #define DB_QUERY_ORDER_BY \
     "  ORDER BY start_timestamp ASC, f.vendor, f.version, f.feature_string"
     
+static const char   *__db_get_last_check_timestamp_query =
+    "SELECT MAX(checked_timestamp) FROM counts";
+    
 //
 
 typedef struct _lmdb {
@@ -924,6 +927,27 @@ lmdb_commit_counts(
     return context.ok;
   }
   return false;
+}
+
+//
+
+bool
+lmdb_get_last_check_timestamp(
+  lmdb_ref      the_db,
+  time_t        *check_timestamp
+)
+{
+  sqlite3_stmt  *stmt = NULL;
+  bool          rc = false;
+  
+  if ( sqlite3_prepare_v2(the_db->db_handle, __db_get_last_check_timestamp_query, -1, &stmt, NULL) == SQLITE_OK ) {
+    if ( sqlite3_step(stmt) == SQLITE_ROW ) {
+      if ( check_timestamp ) *check_timestamp = (time_t)sqlite3_column_int64(stmt, 0);
+      rc = true;
+    }
+    sqlite3_finalize(stmt);
+  }
+  return rc;
 }
 
 //
