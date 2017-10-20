@@ -15,6 +15,13 @@
 
 //
 
+#ifndef LMDB_VERSION_STRING
+# error LMDB_VERSION_STRING is not defined
+#endif
+const char   *lmdb_version_str= LMDB_VERSION_STRING;
+
+//
+
 #ifndef LMDB_PREFIX_DIR
 # error LMDB_PREFIX_DIR is not defined
 #endif
@@ -651,6 +658,7 @@ lmconfig_usage(
 )
 {
   fprintf(stderr,
+      "version %s\n"
       "usage:\n\n"
       "  %s {options}\n\n"
       " options:\n\n"
@@ -774,6 +782,7 @@ lmconfig_usage(
 # endif
 #endif
       ,
+      lmdb_version_str,
       exe,
       lmdb_default_conf_file
 #ifndef LMDB_DISABLE_RRDTOOL

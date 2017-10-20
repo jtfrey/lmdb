@@ -32,6 +32,12 @@ extern const char   *lmdb_rrd_repodir;
 #endif
 
 /*!
+  @constant lmdb_version_str
+  Version of this program, as a string constant.
+*/
+extern const char   *lmdb_version_str;
+
+/*!
 	@constant lmdb_prefix_dir
 	String constant holding the path in which the lmdb software is
 	installed.

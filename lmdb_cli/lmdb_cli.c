@@ -24,7 +24,7 @@ static int          flexlm_feature_match_count = 8;
 
 //
 
-static const char   *lmstat_feature_regex = "(Users of ([^:]+):.*Total of ([0-9]+) licenses in use|\"([^\"]+)\"[[:space:]]+v([^,]+),[[:space:]]+vendor:[[:space:]]+([^,]+),[[:space:]]+expiry:[[:space:]]+([[:digit:]]{2}-[[:alpha:]]{3}-([[:digit:]]{1,4})|permanent))";
+static const char   *lmstat_feature_regex = "(Users of ([^:]+):.*Total of ([0-9]+) licenses? in use|\"([^\"]+)\"[[:space:]]+v([^,]+),[[:space:]]+vendor:[[:space:]]+([^,]+),[[:space:]]+expiry:[[:space:]]+([[:digit:]]{1,2}-[[:alpha:]]{3}-([[:digit:]]{1,4})|permanent))";
 static int          lmstat_feature_regex_flags = REG_ICASE | REG_EXTENDED;
 static int          lmstat_feature_match_count = 8;
 
@@ -193,7 +193,7 @@ main(
 							const char    *next_line;
 							const char    *vendor = NULL, *version = NULL, *feature_string = NULL, *expiration = NULL;
 							time_t        expire_ts = 0;
-							int           in_use;
+							int           in_use = -1;
 						
 							while ( fscanln_get_line(lmstat_scanner, &next_line, NULL) ) {
 								//
@@ -201,22 +201,28 @@ main(
 								//
 								if ( strstr(next_line, "Users of") ) {
 									const char    *in_use_string = fscanln_get_sub_match_string(lmstat_scanner, 3);
-								
-									if ( feature_string ) free((void*)feature_string);
-									feature_string = strdup(fscanln_get_sub_match_string(lmstat_scanner, 2));
+                  const char    *feature_scanned = fscanln_get_sub_match_string(lmstat_scanner, 2);
+                  
+                  lmlogf(lmlog_level_debug, "Found Users of line: %s %s", feature_scanned ? feature_scanned : "<unknown>", in_use_string ? in_use_string : "<unknown>");
 									if ( feature_string ) {
+                    free((void*)feature_string);
+                    feature_string= NULL;
+                  }
+                  in_use = -1;
+                  if ( feature_scanned ) {
+                    feature_string = strdup(feature_scanned);
 										in_use = in_use_string ? strtol(in_use_string, NULL, 10) : 0;
-									} else {
-										in_use = -1;
 									}
 									// Reset other pieces that will come from a vendor info line:
 									vendor = version = expiration = NULL;
 									expire_ts = 0;
-								} else {
+								} else if ( feature_string && (in_use >= 0) ) {
 									//
 									// Vendor info line:
 									//
 									const char    *feature_string_check = fscanln_get_sub_match_string(lmstat_scanner, 4);
+                  
+                  lmlogf(lmlog_level_debug, "Found vendor line: %s", feature_string_check ? feature_string_check : "<unknown>");
 								
 									if ( strcmp(feature_string, feature_string_check) == 0 ) {
 										version = fscanln_get_sub_match_string(lmstat_scanner, 5);
