@@ -36,11 +36,10 @@ __lmdb_rrd_create(
 	sqlite3_stmt	*counts_query
 )
 {
-	char					count_ts_str[32], ds_str[PATH_MAX];
 	const char*   argv[12];
 	int						query_rc, rc, argc, points;
 	int						issued, in_use;
-	sqlite3_int64	count_ts;
+  time_t        count_ts;
 	
 	// Get the first row:
 	if ( counts_query ) {
@@ -48,22 +47,11 @@ __lmdb_rrd_create(
 		switch ( query_rc ) {
 	
 			case SQLITE_DONE:
-				count_ts = (sqlite3_int64)time(NULL);
-				rc = snprintf(ds_str, sizeof(ds_str), "DS:in_use:GAUGE:600:0:U");
-				if ( rc >= sizeof(ds_str) ) {
-					lmlogf(lmlog_level_error, "DS definition length %d exceeds max length %d", rc, (int)sizeof(ds_str));
-					return false;
-				}
+				count_ts = time(NULL);
 				break;
 			
 			case SQLITE_ROW:
-				issued = sqlite3_column_int(counts_query, 0);
-				count_ts = sqlite3_column_int64(counts_query, 2);
-				rc = snprintf(ds_str, sizeof(ds_str), "DS:in_use:GAUGE:600:0:%d", issued);
-				if ( rc >= sizeof(ds_str) ) {
-					lmlogf(lmlog_level_error, "DS definition length %d exceeds max length %d", rc, (int)sizeof(ds_str));
-					return false;
-				}
+				count_ts = (time_t)sqlite3_column_int64(counts_query, 2);
 				break;
 		
 			default:
@@ -72,31 +60,20 @@ __lmdb_rrd_create(
 	
 		}
 	} else {
-		count_ts = (sqlite3_int64)time(NULL);
-		rc = snprintf(ds_str, sizeof(ds_str), "DS:in_use:GAUGE:600:0:U");
-		if ( rc >= sizeof(ds_str) ) {
-			lmlogf(lmlog_level_error, "DS definition length %d exceeds max length %d", rc, (int)sizeof(ds_str));
-			return false;
-		}
+		count_ts = time(NULL);
 	}
 	
-	// Construct the initial timestamp:
-	rc = snprintf(count_ts_str, sizeof(count_ts_str), "%lld", (long long int)count_ts);
-	LMASSERT ( rc < sizeof(count_ts_str) );
-	
 	argc = 0;
-	//argv[argc++] = rrd_path;
-	//argv[argc++] = "--start"; argv[argc++] = count_ts_str;
-	//argv[argc++] = "--step"; argv[argc++] = "300";
-	argv[argc++] = ds_str;
+	argv[argc++] = "DS:in_use:GAUGE:600:0:U";   /* in-use license count */
+	argv[argc++] = "DS:issued:GAUGE:600:0:U";   /* issued seats count */
 	argv[argc++] = "RRA:AVERAGE:0.5:1:5184";    /* 18 days @ 5 minutes*/
 	argv[argc++] = "RRA:AVERAGE:0.5:12:1440";   /* 60 days @ 1 hour*/
 	argv[argc++] = "RRA:AVERAGE:0.5:144:1800";  /* 180 days @ 12 hours */
-	argv[argc++] = "RRA:AVERAGE:0.5:288:1080";   /* 1080 days @ 24 hours */
-	argv[argc++] = "RRA:AVERAGE:0.5:2016:730";   /* 14 years @ 7 days */
+	argv[argc++] = "RRA:AVERAGE:0.5:288:1080";  /* 1080 days @ 24 hours */
+	argv[argc++] = "RRA:AVERAGE:0.5:2016:730";  /* 14 years @ 7 days */
 	
 	rrd_clear_error();
-	rc = rrd_create_r(rrd_path, 300, (time_t)count_ts, argc, argv);
+	rc = rrd_create_r(rrd_path, 300, count_ts, argc, argv);
 	if ( rc ) {
 		lmlogf(lmlog_level_error, "failed to create rrd file for feature '%s' (id=%d): %s", feature_string, feature_id, rrd_get_error());
 		return false;
@@ -113,7 +90,7 @@ __lmdb_rrd_create(
 			in_use = sqlite3_column_int(counts_query, 1);
 			count_ts = sqlite3_column_int64(counts_query, 2);
 			
-			rc = snprintf(point_strs[points], sizeof(rrd_point_str_type), "%lld:%d", (long long int)count_ts, in_use);
+			rc = snprintf(point_strs[points], sizeof(rrd_point_str_type), "%lld:%d:%d", (long long int)count_ts, in_use, issued);
 			if ( rc < sizeof(rrd_point_str_type) ) {
 				argv[points] = &point_strs[points][0];
 				points++;
@@ -140,14 +117,15 @@ bool
 __lmdb_rrd_update(
 	const char		*rrd_path,
 	time_t				count_ts,
-	int						in_use
+	int						in_use,
+  int           issued
 )
 {
 	rrd_point_str_type	point;
 	const char					*argv = &point[0];
 	int									rc;
 	
-	rc = snprintf(point, sizeof(point), "%lld:%d", (long long int)count_ts, in_use);
+	rc = snprintf(point, sizeof(point), "%lld:%d:%d", (long long int)count_ts, in_use, issued);
 	if ( rc < sizeof(point) ) {
 		rrd_clear_error();
 		if ( rrd_update_r(rrd_path, NULL, 1, (const char**)&argv) == 0 ) return true;
@@ -363,7 +341,7 @@ exit_on_error:
 					}
 				}
 				if ( ! was_added && file_exists(rrd_path) ) {
-					__lmdb_rrd_update(rrd_path, check_timestamp, lmfeature_get_in_use(the_feature));
+					__lmdb_rrd_update(rrd_path, check_timestamp, lmfeature_get_in_use(the_feature), lmfeature_get_issued(the_feature));
 				}
 				free((void*)rrd_path);
 			}

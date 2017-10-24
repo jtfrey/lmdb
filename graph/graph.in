@@ -1,0 +1,331 @@
+#!/bin/bash
+#
+# graph
+# lmdb graphing tool
+#
+# Uses data in the RRD files that lmdb_cli creates and updates
+# to generate graphs for each of the license features being
+# tracked.
+#
+# The default settings can be overridden from the command line
+# using flags (use the -h/--help flag to get a list of options)
+# or by editing the configuration file:
+#
+#     @LMDB_GRAPH_CONF@
+#
+# Command line options take highest precedence.
+#
+
+RRDTOOL="@RRDTOOL_EXE@"
+LMDB_BINDIR="@LMDB_INSTALL_BINDIR@"
+RRD_REPODIR="@LMDB_RRD_REPODIR@"
+GRAPH_REPODIR="@LMDB_GRAPH_REPODIR@"
+GRAPH_TYPES="1hr 12hr 1d 7d 30d 365d"
+VERBOSE=0
+IMAGE_FORMAT=PNG
+
+extension_for_format() {
+  case $1 in
+    PNG)
+      echo png
+      ;;
+    PDF)
+      echo pdf
+      ;;
+    EPS)
+      echo eps
+      ;;
+    SVG)
+      echo svg
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+usage() {
+  cat <<EOT
+usage:
+
+  $0 {options}
+
+ options:
+
+  -h/--help             show this information
+  -v/--verbose          show additional information as the program
+                        executes
+
+  -s|--svg              export to SVG format
+  -P|--pdf              export to PDF format
+  -p|--png              export to PNG format (default)
+  -e|--eps              export to EPS format
+
+  -g|--graphs <list>    select specific graph types to export; multiple
+                        values should be separated by whitespace:
+
+                          1hr 12hr 1d 7d 30d 365d
+
+EOT
+}
+
+EARLY_EXIT=0
+ALL_GRAPH_TYPES="1hr 12hr 1d 7d 30d 365d"
+
+if [ -r "@LMDB_GRAPH_CONF@" ]; then
+  . "@LMDB_GRAPH_CONF@"
+fi
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+
+    -h|--help)
+      usage
+      EARLY_EXIT=1
+      ;;
+
+    -v|--verbose)
+      VERBOSE=1
+      ;;
+
+    -s|--svg)
+      IMAGE_FORMAT=SVG
+      ;;
+
+    -P|--pdf)
+      IMAGE_FORMAT=PDF
+      ;;
+
+    -p|--png)
+      IMAGE_FORMAT=PNG
+      ;;
+
+    -e|--eps)
+      IMAGE_FORMAT=EPS
+      ;;
+
+    -g|--graphs)
+      shift
+      GRAPH_TYPES="$1"
+      ;;
+
+  esac
+  shift
+done
+
+if [ $EARLY_EXIT -eq 0 ]; then
+  #
+  # Vet the graph types:
+  #
+  tmp_GRAPH_TYPES=""
+  for graph in $GRAPH_TYPES; do
+    case $graph in
+      1hr|12hr|1d|7d|30d|365d)
+        tmp_GRAPH_TYPES="$tmp_GRAPH_TYPES $graph"
+        ;;
+    esac
+  done
+  if [ -z "$tmp_GRAPH_TYPES" ]; then
+    echo "ERROR:  no valid graph types selected: $GRAPH_TYPES"
+    exit 1
+  fi
+  GRAPH_TYPES="$tmp_GRAPH_TYPES"
+  if [ $VERBOSE -ne 0 ]; then
+    echo "INFO:  selected graph types: $GRAPH_TYPES"
+  fi
+
+  #
+  # Vet the image format:
+  #
+  IMAGE_EXTENSION="$(extension_for_format $IMAGE_FORMAT)"
+  if [ $? -ne 0 ]; then
+    echo "ERROR:  invalid image format: $IMAGE_FORMAT"
+    exit 1
+  fi
+  if [ $VERBOSE -ne 0 ]; then
+    echo "INFO:  selected image format $IMAGE_FORMAT with file extension '.$IMAGE_EXTENSION'"
+  fi
+
+  #
+  # Confirm that RRD file(s) are present:
+  #
+  if [ ! -d "$RRD_REPODIR" ]; then
+    echo "ERROR:  RRD repository does not exist: $RRD_REPODIR"
+    exit 1
+  fi
+  if [ ! -r "$RRD_REPODIR" ]; then
+    echo "ERROR:  RRD repository not readable: $RRD_REPODIR"
+    exit 1
+  else
+    if [ $VERBOSE -ne 0 ]; then
+      echo "INFO:  found readable RRD repository $RRD_REPODIR"
+    fi
+  fi
+  count="$(find "$RRD_REPODIR" -type f -name '*.rrd' | wc -l)"
+  if [ $count -le 0 ]; then
+    echo "WARNING:  No RRD files present in repository $RRD_REPODIR"
+    exit 1
+  else
+    if [ $VERBOSE -ne 0 ]; then
+      echo "INFO:  found $count RRD files in $RRD_REPODIR"
+    fi
+  fi
+
+  #
+  # Confirm we have a graph repository ready:
+  #
+  if [ ! -d "$GRAPH_REPODIR" ]; then
+    echo "ERROR:  graph repository does not exist: $GRAPH_REPODIR"
+    exit 1
+  fi
+  if [ ! -w "$GRAPH_REPODIR" ]; then
+    echo "ERROR:  graph repository not writable: $GRAPH_REPODIR"
+    exit 1
+  fi
+
+  #
+  # Walk the RRD files:
+  #
+  for rrd_file in $(find "$RRD_REPODIR" -type f -name '*.rrd'); do
+    feature_id="$(echo $rrd_file | sed 's/^.*\/\([0-9]*\)\.rrd$/\1/')"
+    feature_name="$("${LMDB_BINDIR}/lmdb_ls" -n -i $feature_id)"
+    for graph in $GRAPH_TYPES; do
+      image="${GRAPH_REPODIR}/${feature_id}-${graph}.${IMAGE_EXTENSION}"
+      case $graph in
+        1hr)
+          start="3600"
+          title="${feature_name} - last hour"
+          ;;
+        12hr)
+          start="43200"
+          title="${feature_name} - last 12 hours"
+          ;;
+        1d)
+          start="86400"
+          title="${feature_name} - last day"
+          ;;
+        7d)
+          start="648000"
+          title="${feature_name} - last 7 days"
+          ;;
+        30d)
+          start="2592000"
+          title="${feature_name} - last 30 days"
+          ;;
+        365d)
+          start="31536000"
+          title="${feature_name} - last year"
+          ;;
+        *)
+          start=""
+          ;;
+      esac
+      if [ -n "$start" ]; then
+        rc="$("$RRDTOOL" graph "$image" --imgformat $IMAGE_FORMAT --start "end-${start}s" --end now --lower-limit 0 --no-gridfit --title "$title" \
+          DEF:in_use="$rrd_file":in_use:AVERAGE \
+          DEF:issued="$rrd_file":issued:AVERAGE \
+          VDEF:in_use_max=in_use,MAXIMUM VDEF:in_use_min=in_use,MINIMUM VDEF:in_use_avg=in_use,AVERAGE VDEF:in_use_last=in_use,LAST \
+          VDEF:issued_max=issued,MAXIMUM VDEF:issued_min=issued,MINIMUM VDEF:issued_last=issued,LAST\
+          'AREA:in_use#cce6ff:in-use seats' \
+          'LINE2:in_use#0066cc' \
+            'GPRINT:in_use_last:last\:%-4.0lf' \
+            'GPRINT:in_use_min:min\:%-4.0lf' \
+            'GPRINT:in_use_max:max\:%-4.0lf' \
+            'GPRINT:in_use_avg:avg\:%-4.0lf\l' \
+          'LINE2:issued#ff6666:issued seats' \
+            'GPRINT:issued_last:last\:%-4.0lf' \
+            'GPRINT:issued_min:min\:%-4.0lf' \
+            'GPRINT:issued_max:max\:%-4.0lf\l' \
+          2>&1)"
+        if [ $? -ne 0 ]; then
+          printf "%s" "$rc"
+        else
+          if [ $VERBOSE -ne 0 ]; then
+            echo "INFO:  generated ${image}"
+          fi
+        fi
+      fi
+    done
+  done
+
+  #
+  # Prep the HTML index page:
+  #
+  when="$(date)"
+  cat > "${GRAPH_REPODIR}/index.html" <<EOT
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>$HOST - license usage graphs</title>
+    <style>
+html,
+body {
+  font-family: sans-serif;
+}
+table {
+  border-collapse: collapse;
+  border: 1px solid black;
+}
+thead {
+  background-color: #444;
+  color: white;
+}
+tfoot {
+  background-color: #444;
+  color: white;
+  font-size: 75%;
+}
+tr {
+  border-bottom: 1px solid black;
+}
+th,
+td {
+  text-align: left;
+  padding: 8px;
+}
+span.graph {
+  background-color: #eee;
+  border: 1px solid black;
+  margin: 2px;
+  padding: 2px;
+}
+    </style>
+  </head>
+  <body>
+    <h1>$HOST</h1>
+    <h2>License usage graphs</h2>
+    <hr/>
+    <table>
+      <thead>
+        <tr><th>Feature</th><th>Graphs</th></tr>
+      </thead>
+      <tbody>
+EOT
+  for line in $("${LMDB_BINDIR}/lmdb_ls" | awk '{printf("%d-%s\n", $1, $2);}'); do
+    feature_id="$(echo $line | sed 's/-.*$//')"
+    feature_name="$(echo $line | sed 's/^[0-9]*-//')"
+    graph_links=""
+    for graph in $ALL_GRAPH_TYPES; do
+      if [ -r "${GRAPH_REPODIR}/${feature_id}-${graph}.${IMAGE_EXTENSION}" ]; then
+        graph_links="${graph_links}<span class=\"graph\"><a href=\"${feature_id}-${graph}.${IMAGE_EXTENSION}\">$graph</a></span>"
+      else
+        graph_links="${graph_links}<span class=\"graph\">$graph</span>"
+      fi
+    done
+    cat >> "${GRAPH_REPODIR}/index.html" <<EOT
+        <tr><td>$feature_name</td><td>$graph_links</td></tr>
+EOT
+  done
+  cat >> "${GRAPH_REPODIR}/index.html" <<EOT
+      </tbody>
+      <tfoot>
+        <tr><td colspan="2">$when</td><tr>
+      </tfoot>
+    </table>
+  </body>
+</html>
+
+EOT
+fi

@@ -3,20 +3,14 @@
 #
 
 #
-# Valid graph types are:
-#
-#   hour        last 60 minutes
-#   12hour      last 12 hours
-#   day         last 24 hours
-#   week        last 7 days
-#   month       last 30 days
-#
-GRAPH_TYPES="hour day week"
-
-#
 # Override which rrdtool executable is used:
 #
 #RRDTOOL=/usr/bin/rrdtool
+
+#
+# Override the LMDB binary executables directory:
+#
+#LMDB_BINDIR=/usr/local/bin
 
 #
 # Override the RRD repository directory:
@@ -27,3 +21,30 @@ GRAPH_TYPES="hour day week"
 # Override the graphic repository directory:
 #
 #GRAPH_REPODIR=/var/lib/lmdb/graphs
+
+#
+# Override the default graph types.  Valid graph types are:
+#
+#   1hr     last 60 minutes
+#   12hr    last 12 hours
+#   1d      last 24 hours
+#   7d      last 7 days
+#   30d     last 30 days
+#   365d    last 365 days
+#
+#GRAPH_TYPES="1hr 1d 7d"
+
+#
+# Override the default verbosity level:
+#
+#VERBOSE=1
+
+#
+# Override the default image format.  Valid formats are:
+#
+#   PNG       Portable Network Graphic (default)
+#   PDF       Portable Document Format
+#   SVG       Scalable Vector Graphic
+#   EPS       Encapsulated PostScript
+#
+#IMAGE_FORMAT=PNG
