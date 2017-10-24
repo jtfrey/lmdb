@@ -24,9 +24,9 @@ static int          flexlm_feature_match_count = 8;
 
 //
 
-static const char   *lmstat_feature_regex = "(Users of ([^:]+):.*Total of ([0-9]+) licenses? in use|\"([^\"]+)\"[[:space:]]+v([^,]+),[[:space:]]+vendor:[[:space:]]+([^,]+),[[:space:]]+expiry:[[:space:]]+([[:digit:]]{1,2}-[[:alpha:]]{3}-([[:digit:]]{1,4})|permanent))";
+static const char   *lmstat_feature_regex = "(Users of ([^:]+):.*Total of ([0-9]+) licenses? issued;[[:space:]]+Total of ([0-9]+) licenses? in use|\"([^\"]+)\"[[:space:]]+v([^,]+),[[:space:]]+vendor:[[:space:]]+([^,]+),[[:space:]]+expiry:[[:space:]]+([[:digit:]]{1,2}-[[:alpha:]]{3}-([[:digit:]]{1,4})|permanent))";
 static int          lmstat_feature_regex_flags = REG_ICASE | REG_EXTENDED;
-static int          lmstat_feature_match_count = 8;
+static int          lmstat_feature_match_count = 9;
 
 //
 
@@ -110,7 +110,7 @@ main(
             
             while ( fscanln_get_line(flexlm_scanner, &next_line, NULL) ) {
               const char  *vendor, *version, *feature_string, *expiration, *count;
-              time_t      expire_ts = 0;
+              time_t      expire_ts = lmfeature_no_expiration;
               
               feature_string = fscanln_get_sub_match_string(flexlm_scanner, 2);
               vendor = fscanln_get_sub_match_string(flexlm_scanner, 3);
@@ -120,19 +120,28 @@ main(
                 
               if ( expiration ) {
                 if ( strcasecmp(expiration, "permanent") != 0 ) {
-                  size_t    zero_run = strspn(expiration + 7, "0");
-                  
-                  if ( zero_run && (*(expiration + 7 + zero_run) == '\0') ) {
-                    // A year that's all zeroes => permanent
-                  } else {
-                    struct tm   expire_conv;
-                    
-                    memset(&expire_conv, 0, sizeof(expire_conv));
-                    expire_conv.tm_isdst = -1;
-                    if ( strptime(expiration, "%d-%b-%Y", &expire_conv) ) {
-                      expire_ts = mktime(&expire_conv);
-                    }
-                  }
+                	const char	*year = expiration;
+                	int					dashes = 0;
+                	
+                	while ( *year && (dashes < 2) ) {
+                		if ( *year == '-' ) dashes++;
+                		year++;
+                	}
+                	if ( dashes == 2 ) {
+										size_t    zero_run = strspn(year, "0");
+									
+										if ( zero_run && (*(year + zero_run) == '\0') ) {
+											// A year that's all zeroes => permanent
+										} else {
+											struct tm   expire_conv;
+										
+											memset(&expire_conv, 0, sizeof(expire_conv));
+											expire_conv.tm_isdst = -1;
+											if ( strptime(expiration, "%d-%b-%Y", &expire_conv) ) {
+												expire_ts = mktime(&expire_conv);
+											}
+										}
+									}
                 }
               }
         
@@ -192,56 +201,67 @@ main(
 						if ( fscanln_set_line_regex(lmstat_scanner, lmstat_feature_regex, lmstat_feature_regex_flags, lmstat_feature_match_count) ) {
 							const char    *next_line;
 							const char    *vendor = NULL, *version = NULL, *feature_string = NULL, *expiration = NULL;
-							time_t        expire_ts = 0;
-							int           in_use = -1;
+							time_t        expire_ts = lmfeature_no_expiration;
+							int           in_use = -1, issued = -1;
 						
 							while ( fscanln_get_line(lmstat_scanner, &next_line, NULL) ) {
 								//
 								// What did we match, a "Users of" line or a vendor info line?
 								//
 								if ( strstr(next_line, "Users of") ) {
-									const char    *in_use_string = fscanln_get_sub_match_string(lmstat_scanner, 3);
+								  const char		*issued_string = fscanln_get_sub_match_string(lmstat_scanner, 3);
+									const char    *in_use_string = fscanln_get_sub_match_string(lmstat_scanner, 4);
                   const char    *feature_scanned = fscanln_get_sub_match_string(lmstat_scanner, 2);
                   
-                  lmlogf(lmlog_level_debug, "Found Users of line: %s %s", feature_scanned ? feature_scanned : "<unknown>", in_use_string ? in_use_string : "<unknown>");
+                  lmlogf(lmlog_level_debug, "Found Users of line: %s %s of %s", feature_scanned ? feature_scanned : "<unknown>", in_use_string ? in_use_string : "<unknown>", issued_string ? issued_string : "<unknown>");
 									if ( feature_string ) {
                     free((void*)feature_string);
                     feature_string= NULL;
                   }
-                  in_use = -1;
+                  in_use = -1; issued = -1;
                   if ( feature_scanned ) {
                     feature_string = strdup(feature_scanned);
 										in_use = in_use_string ? strtol(in_use_string, NULL, 10) : 0;
+										issued = issued_string ? strtol(issued_string, NULL, 10) : 0;
 									}
 									// Reset other pieces that will come from a vendor info line:
 									vendor = version = expiration = NULL;
-									expire_ts = 0;
+									expire_ts = lmfeature_no_expiration;
 								} else if ( feature_string && (in_use >= 0) ) {
 									//
 									// Vendor info line:
 									//
-									const char    *feature_string_check = fscanln_get_sub_match_string(lmstat_scanner, 4);
+									const char    *feature_string_check = fscanln_get_sub_match_string(lmstat_scanner, 5);
                   
                   lmlogf(lmlog_level_debug, "Found vendor line: %s", feature_string_check ? feature_string_check : "<unknown>");
 								
 									if ( strcmp(feature_string, feature_string_check) == 0 ) {
-										version = fscanln_get_sub_match_string(lmstat_scanner, 5);
-										vendor = fscanln_get_sub_match_string(lmstat_scanner, 6);
-										expiration = fscanln_get_sub_match_string(lmstat_scanner, 7);
+										version = fscanln_get_sub_match_string(lmstat_scanner, 6);
+										vendor = fscanln_get_sub_match_string(lmstat_scanner, 7);
+										expiration = fscanln_get_sub_match_string(lmstat_scanner, 8);
 									
 										if ( expiration ) {
 											if ( strcasecmp(expiration, "permanent") != 0 ) {
-												size_t    zero_run = strspn(expiration + 7, "0");
+												const char	*year = expiration;
+												int					dashes = 0;
+									
+												while ( *year && (dashes < 2) ) {
+													if ( *year == '-' ) dashes++;
+													year++;
+												}
+												if ( dashes == 2 ) {
+													size_t    zero_run = strspn(year, "0");
 											
-												if ( zero_run && (*(expiration + 7 + zero_run) == '\0') ) {
-													// A year that's all zeroes => permanent
-												} else {
-													struct tm   expire_conv;
+													if ( zero_run && (*(year + zero_run) == '\0') ) {
+														// A year that's all zeroes => permanent
+													} else {
+														struct tm   expire_conv;
 												
-													memset(&expire_conv, 0, sizeof(expire_conv));
-													expire_conv.tm_isdst = -1;
-													if ( strptime(expiration, "%d-%b-%Y", &expire_conv) ) {
-														expire_ts = mktime(&expire_conv);
+														memset(&expire_conv, 0, sizeof(expire_conv));
+														expire_conv.tm_isdst = -1;
+														if ( strptime(expiration, "%d-%b-%Y", &expire_conv) ) {
+															expire_ts = mktime(&expire_conv);
+														}
 													}
 												}
 											}
@@ -251,8 +271,9 @@ main(
 											lmfeature_ref   feature = lmdb_get_feature_by_name(the_database, feature_string, vendor, version);
 										
 											if ( feature ) {
-												LMDEBUG("%s (%s %s), incrementing in-use by %d", feature_string, vendor, version, in_use);
+												LMDEBUG("%s (%s %s), incrementing in-use by %d (issued = %d)", feature_string, vendor, version, in_use, issued);
 												lmfeature_add_in_use(feature, in_use);
+												if ( issued > 0 ) lmfeature_set_issued(feature, issued);
 											
 												if ( expire_ts != lmfeature_get_expiration_date(feature) ) {
 													LMDEBUG("%s (%s %s), setting expiration timestamp %lld", feature_string, vendor, version, (long long int)expire_ts);

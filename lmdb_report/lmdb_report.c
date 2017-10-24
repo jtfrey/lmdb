@@ -50,16 +50,32 @@ typedef struct {
 //
 
 static inline display_field_control
-display_field_control_make(void)
+display_field_control_make(
+  bool        should_show_headers
+)
 {
 	display_field_control			ctl;
 	int												i;
 	
 	for ( i = display_field_feature_id; i < display_field_max; i++ ) {
 		ctl.disable[i] = false;
-		ctl.width[i] = strlen(display_field_header[i]);
+		ctl.width[i] = should_show_headers ? strlen(display_field_header[i]) : 0;
 	}
 	return ctl;					
+}
+
+//
+
+void
+display_field_control_show(
+  display_field_control *ctl
+)
+{
+	int												i;
+	
+	for ( i = display_field_feature_id; i < display_field_max; i++ ) {
+    printf("%-6s %d\n", ctl->disable[i] ? "true" : "false", ctl->width[i]);
+	}
 }
 
 //
@@ -334,7 +350,8 @@ column_display_range_iterator(
       printf("%*d ", ctl->width[display_field_in_use], in_use.min);
     } else {
       int				w = (ctl->width[display_field_in_use] - 2) / 3;
-      
+      int       extra = ctl->width[display_field_in_use] - (3 * w + 2);
+      while ( extra-- ) fputc(' ', stdout);
       printf("%*d/%*d/%*d ", w, in_use.min, w, in_use.max, w, in_use.avg);
     }
 	}
@@ -343,7 +360,8 @@ column_display_range_iterator(
       printf("%*d ", ctl->width[display_field_issued], issued.min);
     } else {
       int				w = (ctl->width[display_field_issued] - 2) / 3;
-      
+      int       extra = ctl->width[display_field_issued] - (3 * w + 2);
+      while ( extra-- ) fputc(' ', stdout);
       printf("%*d/%*d/%*d ", w, issued.min, w, issued.max, w, issued.avg);
     }
 	}
@@ -352,7 +370,8 @@ column_display_range_iterator(
       printf("%*d%% ", ctl->width[display_field_percentage] - 1, pct_min);
     } else {
       int				w = ((ctl->width[display_field_percentage] - 2) / 3) - 1;
-      
+      int       extra = ctl->width[display_field_percentage] - (3 * (w + 1) + 2);
+      while ( extra-- ) fputc(' ', stdout);
       printf("%*d%%/%*d%%/%*d%% ", w, (int)ceil(pct_min), w, (int)ceil(pct_max), w, (int)ceil(pct_avg));
     }
 	}
@@ -595,7 +614,7 @@ main(
     the_database = lmdb_create_read_only(the_conf->license_db_path);
     if ( the_database ) {
       lmdb_usage_report_ref         the_report;
-      display_field_control         column_ctl = display_field_control_make();
+      display_field_control         column_ctl = display_field_control_make(the_conf->should_show_headers);
       lmdb_usage_report_aggregate   aggregate = the_conf->report_aggregate;
       lmdb_usage_report_range       range = the_conf->report_range;
       lmdb_predicate_ref            predicate = NULL;
