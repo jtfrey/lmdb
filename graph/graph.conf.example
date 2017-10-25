@@ -29,8 +29,10 @@
 #   12hr    last 12 hours
 #   1d      last 24 hours
 #   7d      last 7 days
-#   30d     last 30 days
-#   365d    last 365 days
+#   30d     last 30 days (1 month)
+#   90d     last 90 days (3 month)
+#   180d    last 180 days (1/2 year)
+#   365d    last 365 days (1 year)
 #
 #GRAPH_TYPES="1hr 1d 7d"
 

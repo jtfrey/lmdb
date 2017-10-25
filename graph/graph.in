@@ -20,7 +20,7 @@ RRDTOOL="@RRDTOOL_EXE@"
 LMDB_BINDIR="@LMDB_INSTALL_BINDIR@"
 RRD_REPODIR="@LMDB_RRD_REPODIR@"
 GRAPH_REPODIR="@LMDB_GRAPH_REPODIR@"
-GRAPH_TYPES="1hr 12hr 1d 7d 30d 365d"
+GRAPH_TYPES="1hr 12hr 1d 7d 30d 90d 180d 365d"
 VERBOSE=0
 IMAGE_FORMAT=PNG
 
@@ -65,13 +65,13 @@ usage:
   -g|--graphs <list>    select specific graph types to export; multiple
                         values should be separated by whitespace:
 
-                          1hr 12hr 1d 7d 30d 365d
+                          1hr 12hr 1d 7d 30d 90d 180d 365d
 
 EOT
 }
 
 EARLY_EXIT=0
-ALL_GRAPH_TYPES="1hr 12hr 1d 7d 30d 365d"
+ALL_GRAPH_TYPES="1hr 12hr 1d 7d 30d 90d 180d 365d"
 
 if [ -r "@LMDB_GRAPH_CONF@" ]; then
   . "@LMDB_GRAPH_CONF@"
@@ -121,7 +121,7 @@ if [ $EARLY_EXIT -eq 0 ]; then
   tmp_GRAPH_TYPES=""
   for graph in $GRAPH_TYPES; do
     case $graph in
-      1hr|12hr|1d|7d|30d|365d)
+      1hr|12hr|1d|7d|30d|90d|180d|365d)
         tmp_GRAPH_TYPES="$tmp_GRAPH_TYPES $graph"
         ;;
     esac
@@ -213,6 +213,14 @@ if [ $EARLY_EXIT -eq 0 ]; then
           start="2592000"
           title="${feature_name} - last 30 days"
           ;;
+        90d)
+          start="7776000"
+          title="${feature_name} - last 90 days"
+          ;;
+        180d)
+          start="15552000"
+          title="${feature_name} - last 6 months"
+          ;;
         365d)
           start="31536000"
           title="${feature_name} - last year"
@@ -258,7 +266,7 @@ if [ $EARLY_EXIT -eq 0 ]; then
 <html>
   <head>
     <meta charset="UTF-8">
-    <title>$HOST - license usage graphs</title>
+    <title>$HOSTNAME - license usage graphs</title>
     <style>
 html,
 body {
@@ -294,7 +302,7 @@ span.graph {
     </style>
   </head>
   <body>
-    <h1>$HOST</h1>
+    <h1>$HOSTNAME</h1>
     <h2>License usage graphs</h2>
     <hr/>
     <table>
